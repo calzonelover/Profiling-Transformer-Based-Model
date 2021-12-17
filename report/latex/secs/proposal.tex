@@ -1,0 +1,58 @@
+\section{Motivation and Proposed Research}
+
+
+% \textcolor{red}{transformer-based is famous and frequently used $\rightarrow$ scaling problem $\rightarrow$ trace back to root cause to improve in the future}
+
+\subsection{Motivation}
+\label{sec:motiv}
+
+The Transformer-based model has become more and more popular these days. The capability transfer learning is also employed in this model. This technique can save a lot of annotation resources. However, the model is composed of more than a hundred million floating numbers, which can be considered as huge model. It consumes a lot of computational resources. The preliminary observation shows that they are very poor at scalability when adding more GPU computes units. The hypothesis is that the latency came from communication overhead among the graphical processing units
+
+% Transformer-based model has becoming more and more popular in these day. The capability transfer learning is also employed on this model. This technique can save a lot of annotation resources. However, the model composed of more than hundred million floating numbers which considered as huge model. It consumes a lot of computational resources. The preliminary observation shows that the they are very poor at scalability when adding more unit of GPU computes. The hypothesis is that the latency came from communication overhead among the graphical processing units.
+
+
+\subsubsection{Our Goal}
+\label{sec:goal}
+
+In order to investigate whether our hypothesis is true or false, we inspect the activities in the running process to find the root cause of the problem. 
+
+% Once you motivate your reader in Section~\ref{sec:motiv},\footnote{See how I can also refer to
+% other subsections using the \texttt{ref} and \texttt{label} commands: label creates a named label that
+% you can refer to later using ref)} you should list the goal. Below is an example,
+% including how I enumerate these using another set of commands.
+
+In summary, we plan to answer the following questions:
+
+\begin{enumerate}
+\item Why is the speed-up factor when adding more GPU very poor?
+\item Does the system introduce more communication latency as the compute unit increases?
+\item If there is a communication overhead, which communication interface that the system mostly spend their time in?
+\end{enumerate}
+
+
+\subsection{Proposed Idea}
+
+% \textcolor{red}{a brief idea}
+We record the running activities from CUDA's interface calling from both built-in and the custom kernel by using \textsc{NVProf}. This software could track the calling interface on the fly when we train the model, which allows us to trace back to the low-level issue.
+% Then you can describe what you want to do here.
+
+
+\subsubsection{Methodology}
+
+There are more than a hundred unique interface names from both CUDA built-in and the custom kernel from a developer who developed the technology stack. To simplify the problem, we divide the instructions into four groups as follows: ``\textsc{matrix-mul}'' as the matrix multiplicative operator, ``\textsc{memory\_mgmt}'' is the memory management, ``\textsc{custom\_ops}'' to be the custom kernel and ``\textsc{other}'' for the rest of them.
+
+\begin{lstlisting}
+def get_ins_group(ops: str) -> str:
+    if "gemm" in ops:
+        return "matrix-mul"
+    elif "CUDA memcpy" in ops or "nccl" in ops.lower() \
+        or "copy_device_to_device" in ops.lower() or "CUDA memset" in ops:
+        return "memory_mgmt"
+    elif "::native" in ops or "vectorized_elementwise" in ops \
+        or "_cpp1_ii" in ops or "reduce_kernel" in ops:
+        return "custom_ops"
+    return "other"
+\end{lstlisting}
+
+We are considering on the fraction of spending time in each group of calling interfaces. If the system and software can run efficiently, the spending time in \textsc{memory\_mgnt} would significantly very low comparing to \textsc{matrix-mul} and \textsc{custom\_ops} and vice versa.
+
